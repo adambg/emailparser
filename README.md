@@ -8,20 +8,23 @@ See `emailparser_test.go` for full example
 
 ```
 import (
-    github.com/adambg/emailparser
+    "github.com/adambg/emailparser"
 )
 
 func main() {
-    emlObject := Parse([]byte(demoEmail))
+    in := bufio.NewReader(os.Stdin)
+	rawEmail, _ := io.ReadAll(in)
+
+    eml := emailparser.Parse([]byte(demoEmail))
     
-    fmt.Printf("From: %s", emlObject.From)
-	fmt.Printf("To: %s", emlObject.To)
-	fmt.Printf("Subject: %s", emlObject.Subject)
-	fmt.Printf("Date: %s", emlObject.Date)
-	fmt.Printf("BodyHtml: %s", emlObject.BodyHtml)
-	fmt.Printf("BodyText: %s", emlObject.BodyText)
-	fmt.Printf("ContentType: %s", emlObject.ContentType)
-	fmt.Printf("Attchments: %d", len(emlObject.Attachments))
+	fmt.Println("From: ", eml.From)
+	fmt.Println("To: ", eml.To)
+	fmt.Println("Subject: ", eml.Subject)
+	fmt.Println("Date: ", eml.Date)
+	fmt.Println("BodyHtml: ", eml.BodyHtml)
+	fmt.Println("BodyText: ", eml.BodyText)
+	fmt.Println("ContentType: ", eml.ContentType)
+	fmt.Println("Attchments: ", len(eml.Attachments))
 }
 ```
 The return object is this:
