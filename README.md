@@ -13,18 +13,18 @@ import (
 
 func main() {
     in := bufio.NewReader(os.Stdin)
-	rawEmail, _ := io.ReadAll(in)
+    rawEmail, _ := io.ReadAll(in)
 
     eml := emailparser.Parse([]byte(demoEmail))
     
-	fmt.Println("From: ", eml.From)
-	fmt.Println("To: ", eml.To)
-	fmt.Println("Subject: ", eml.Subject)
-	fmt.Println("Date: ", eml.Date)
-	fmt.Println("BodyHtml: ", eml.BodyHtml)
-	fmt.Println("BodyText: ", eml.BodyText)
-	fmt.Println("ContentType: ", eml.ContentType)
-	fmt.Println("Attchments: ", len(eml.Attachments))
+    fmt.Println("From: ", eml.From)
+    fmt.Println("To: ", eml.To)
+    fmt.Println("Subject: ", eml.Subject)
+    fmt.Println("Date: ", eml.Date)
+    fmt.Println("BodyHtml: ", eml.BodyHtml)
+    fmt.Println("BodyText: ", eml.BodyText)
+    fmt.Println("ContentType: ", eml.ContentType)
+    fmt.Println("Attchments: ", len(eml.Attachments))
 }
 ```
 The return object is this:
