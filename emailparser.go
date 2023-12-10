@@ -16,12 +16,12 @@ import (
 	"golang.org/x/net/html"
 )
 
-type attachments struct {
+type Attachments struct {
 	Mimetype string `json:"mimetype"`
 	Filename string `json:"filename"`
 	Data     []byte `json:"data"`
 }
-type email struct {
+type Email struct {
 	From        string        `json:"from"`
 	To          string        `json:"to"`
 	Subject     string        `json:"subject"`
@@ -29,15 +29,15 @@ type email struct {
 	ContentType string        `json:"contenttype"`
 	BodyText    string        `json:"bodytext"`
 	BodyHtml    string        `json:"bodyhtml"`
-	Attachments []attachments `json:"attachments"`
+	Attachments []Attachments `json:"attachments"`
 	Error       error         `json:"error"`
 }
 
-var eml email
+var eml Email
 
 // Read a MIME multipart email from stdio and explode its MIME parts into
 // separated files, one for each part.
-func Parse(inp []byte) *email {
+func Parse(inp []byte) *Email {
 
 	//  Parse the message to separate the Header and the Body with mail.ReadMessage()
 	// m, err := mail.ReadMessage(os.Stdin)
@@ -89,7 +89,7 @@ func Parse(inp []byte) *email {
 // and extract the email from there.
 // Function returns a new email and the attachment that was used to extract body (so you can discard it
 // if you wish). If no attachment used it will return -1
-func ExtractBodyFromHtmlAttachment(eml email, attachmentID ...int) (*email, int) {
+func ExtractBodyFromHtmlAttachment(eml Email, attachmentID ...int) (*Email, int) {
 
 	// First check if BodyHtml has content for those cases where only BodyHtml was sent without BodyText
 	if len(eml.BodyHtml) > 0 {
@@ -178,7 +178,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 			eml.Error = err
 		} else {
 			// ioutil.WriteFile(filename, decoded_content, 0644)
-			var atch attachments
+			var atch Attachments
 			atch.Filename = filename
 			atch.Mimetype = mediaType
 			atch.Data = decoded_content
@@ -191,7 +191,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 			eml.Error = err
 		} else {
 			// ioutil.WriteFile(filename, decoded_content, 0644)
-			var atch attachments
+			var atch Attachments
 			atch.Filename = filename
 			atch.Mimetype = mediaType
 			atch.Data = decoded_content
@@ -200,7 +200,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 
 	default:
 		// ioutil.WriteFile(filename, part_data, 0644)
-		var atch attachments
+		var atch Attachments
 		atch.Filename = filename
 		atch.Mimetype = mediaType
 		atch.Data = part_data
