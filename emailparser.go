@@ -12,6 +12,8 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 type attachments struct {
@@ -79,6 +81,59 @@ func Parse(inp []byte) *email {
 	// level where the MIME parts are separated with params["boundary"].
 	parsePart(m.Body, params["boundary"], 1)
 	return &eml
+}
+
+// Some mail clients sends email with empty body, and the body itself comes as an HTML attachment.
+// Check for length of email.bodyText, and if empty you can extract the body from one of the attachments.
+// attachmentID is optional. If not set, function will search for the first attachment of content type HTML
+// and extract the email from there.
+// Function returns a new email and the attachment that was used to extract body (so you can discard it
+// if you wish). If no attachment used it will return -1
+func ExtractBodyFromHtmlAttachment(eml email, attachmentID ...int) (*email, int) {
+
+	// First check if BodyHtml has content for those cases where only BodyHtml was sent without BodyText
+	if len(eml.BodyHtml) > 0 {
+		eml.BodyText = htmlToText(eml.BodyHtml)
+		return &eml, -1
+	} else {
+
+		for i := 0; i < len(eml.Attachments); i++ {
+			if eml.Attachments[i].Mimetype == "text/html" {
+				eml.BodyText = htmlToText(string(eml.Attachments[i].Data))
+				eml.BodyHtml = string(eml.Attachments[i].Data)
+				return &eml, i
+			}
+		}
+	}
+	// return same input object as probably no body is in the email
+	return &eml, -1
+}
+
+func htmlToText(inp string) (bodyText string) {
+
+	domDocTest := html.NewTokenizer(strings.NewReader(inp))
+	previousStartTokenTest := domDocTest.Token()
+
+loopDomTest:
+	for {
+		tt := domDocTest.Next()
+		switch {
+		case tt == html.ErrorToken:
+			break loopDomTest // End of the document,  done
+		case tt == html.StartTagToken:
+			previousStartTokenTest = domDocTest.Token()
+		case tt == html.TextToken:
+			if previousStartTokenTest.Data == "script" {
+				continue
+			}
+			TxtContent := strings.TrimSpace(html.UnescapeString(string(domDocTest.Text())))
+			if len(TxtContent) > 0 {
+				bodyText = fmt.Sprintf("%s\n%s", bodyText, TxtContent)
+			}
+		}
+	}
+	return (bodyText)
+
 }
 
 // BuildFileName builds a file name for a MIME part, using information extracted from
