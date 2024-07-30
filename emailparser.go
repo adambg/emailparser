@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
 )
 
 type Attachments struct {
@@ -24,13 +25,15 @@ type Attachments struct {
 type Email struct {
 	From        string        `json:"from"`
 	To          string        `json:"to"`
+	CC          string        `json:"cc"`
+	BCC         string        `json:"bcc"`
 	Subject     string        `json:"subject"`
 	Date        string        `json:"date"`
 	ContentType string        `json:"contenttype"`
 	BodyText    string        `json:"bodytext"`
 	BodyHtml    string        `json:"bodyhtml"`
 	Attachments []Attachments `json:"attachments"`
-	Error       error         `json:"error"`
+	Error       string        `json:"_"`
 }
 
 var eml Email
@@ -44,7 +47,7 @@ func Parse(inp []byte) *Email {
 	reader := bytes.NewReader(inp)
 	m, err := mail.ReadMessage(reader)
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 		return &eml
 	}
 
@@ -55,26 +58,28 @@ func Parse(inp []byte) *Email {
 
 	eml.From, err = dec.DecodeHeader(m.Header.Get("From"))
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 	}
 	eml.To, err = dec.DecodeHeader(m.Header.Get("To"))
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 	}
+	eml.CC, _ = dec.DecodeHeader(m.Header.Get("Cc"))
+	eml.BCC, _ = dec.DecodeHeader(m.Header.Get("Bcc"))
 	eml.Subject, err = dec.DecodeHeader(m.Header.Get("Subject"))
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 	}
 	eml.Date = m.Header.Get("Date")
 	eml.ContentType = m.Header.Get("Content-Type")
 
 	mediaType, params, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 	}
 
 	if !strings.HasPrefix(mediaType, "multipart/") {
-		eml.Error = fmt.Errorf("not a multipart MIME message")
+		eml.Error = "not a multipart MIME message"
 	}
 
 	// Recursivey parsed the MIME parts of the Body, starting with the first
@@ -106,7 +111,23 @@ func ExtractBodyFromHtmlAttachment(eml Email, attachmentID ...int) (*Email, int)
 		}
 	}
 	// return same input object as probably no body is in the email
+
 	return &eml, -1
+}
+
+func fromISO88591(inp string) (string, error) {
+	enc, name, ok := charset.DetermineEncoding([]byte(inp), "")
+	fmt.Printf("%+v\n%+v\n%+v", enc, name, ok)
+
+	r, err := charset.NewReaderLabel(name, strings.NewReader(inp))
+	if err != nil {
+		return "", err
+	}
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
 }
 
 func htmlToText(inp string) (bodyText string) {
@@ -123,7 +144,7 @@ loopDomTest:
 		case tt == html.StartTagToken:
 			previousStartTokenTest = domDocTest.Token()
 		case tt == html.TextToken:
-			if previousStartTokenTest.Data == "script" {
+			if previousStartTokenTest.Data == "script" || previousStartTokenTest.Data == "style" {
 				continue
 			}
 			TxtContent := strings.TrimSpace(html.UnescapeString(string(domDocTest.Text())))
@@ -132,6 +153,10 @@ loopDomTest:
 			}
 		}
 	}
+
+	// fmt.Printf("ORIG: %s", bodyText)
+	// bodyText, _ = fromISO88591(bodyText)
+
 	return (bodyText)
 
 }
@@ -164,7 +189,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 	// Read the data for this MIME part
 	part_data, err := io.ReadAll(part)
 	if err != nil {
-		eml.Error = err
+		eml.Error = err.Error()
 		return
 	}
 
@@ -175,7 +200,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 	case strings.Compare(content_transfer_encoding, "BASE64") == 0:
 		decoded_content, err := base64.StdEncoding.DecodeString(string(part_data))
 		if err != nil {
-			eml.Error = err
+			eml.Error = err.Error()
 		} else {
 			// ioutil.WriteFile(filename, decoded_content, 0644)
 			var atch Attachments
@@ -188,7 +213,7 @@ func writePart(part *multipart.Part, filename string, mediaType string) {
 	case strings.Compare(content_transfer_encoding, "QUOTED-PRINTABLE") == 0:
 		decoded_content, err := io.ReadAll(quotedprintable.NewReader(bytes.NewReader(part_data)))
 		if err != nil {
-			eml.Error = err
+			eml.Error = err.Error()
 		} else {
 			// ioutil.WriteFile(filename, decoded_content, 0644)
 			var atch Attachments
@@ -239,7 +264,7 @@ func parsePart(mime_data io.Reader, boundary string, index int) {
 			break
 		}
 		if err != nil {
-			eml.Error = err
+			eml.Error = err.Error()
 			break
 		}
 

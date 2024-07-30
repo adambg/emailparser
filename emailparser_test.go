@@ -44,7 +44,7 @@ func TestParse(t *testing.T) {
 	// fmt.Printf("ContentType: %s", emlObject.ContentType)
 	// fmt.Printf("Attchments: %d", len(emlObject.Attachments))
 
-	if emlObject.Error != nil {
+	if emlObject.Error != "" {
 		t.Errorf("TestParse got error %+v", emlObject.Error)
 	}
 }
@@ -53,7 +53,7 @@ func TestError(t *testing.T) {
 	// var emlObject email
 	emlObject := Parse([]byte("some string that does not represent raw email"))
 
-	if emlObject.Error == nil {
+	if emlObject.Error == "" {
 		t.Errorf("TestError resulted with no error although it should have")
 	}
 }

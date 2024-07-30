@@ -1,7 +1,7 @@
 ## emailparser
 
 Parse raw email into email struct with text/plain, text/html and attachments  
-based on https://github.com/kirabou/parseMIMEemail.go
+
 ### Usage
 
 Execute with `go run . < email.txt`
@@ -47,3 +47,7 @@ type attachments struct {
 	Data     []byte `json:"data"`
 }
 ```
+
+### Notes
+
+based on https://github.com/kirabou/parseMIMEemail.go  
