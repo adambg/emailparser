@@ -24,6 +24,7 @@ type Attachments struct {
 }
 type Email struct {
 	From        string        `json:"from"`
+	OrigTo      string        `json:"origto"`
 	To          string        `json:"to"`
 	CC          string        `json:"cc"`
 	BCC         string        `json:"bcc"`
@@ -63,6 +64,10 @@ func Parse(inp []byte) *Email {
 	eml.To, err = dec.DecodeHeader(m.Header.Get("To"))
 	if err != nil {
 		eml.Error = err.Error()
+	}
+	eml.OrigTo, _ = dec.DecodeHeader(m.Header.Get("X-Forwarded-To"))
+	if eml.OrigTo == "" {
+		eml.OrigTo, _ = dec.DecodeHeader(m.Header.Get("X-Original-To"))
 	}
 	eml.CC, _ = dec.DecodeHeader(m.Header.Get("Cc"))
 	eml.BCC, _ = dec.DecodeHeader(m.Header.Get("Bcc"))
@@ -130,7 +135,7 @@ func fromISO88591(inp string) (string, error) {
 	return string(buf), nil
 }
 
-func htmlToText(inp string) (bodyText string) {
+func htmlToTextOld(inp string) (bodyText string) {
 
 	domDocTest := html.NewTokenizer(strings.NewReader(inp))
 	previousStartTokenTest := domDocTest.Token()
@@ -159,6 +164,170 @@ loopDomTest:
 
 	return (bodyText)
 
+}
+
+func htmlToText(inp string) string {
+	doc, err := html.Parse(strings.NewReader(inp))
+	if err != nil {
+		return htmlToTextTokenizer(inp)
+
+	}
+
+	var result strings.Builder
+	extractText(doc, &result)
+	return strings.TrimSpace(result.String())
+}
+
+func extractText(n *html.Node, result *strings.Builder) {
+	if n.Type == html.TextNode {
+		text := strings.TrimSpace(n.Data)
+		if text != "" {
+			result.WriteString(text)
+			result.WriteString(" ")
+		}
+		return
+	}
+
+	if n.Type == html.ElementNode {
+		switch n.Data {
+		case "script", "style", "head":
+			// Skip these elements entirely
+			return
+		case "a":
+			// Handle links specially
+			handleLink(n, result)
+			return
+		case "br", "p", "div", "h1", "h2", "h3", "h4", "h5", "h6":
+			// Add line breaks for block elements
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				extractText(c, result)
+			}
+			result.WriteString("\n")
+			return
+		}
+	}
+
+	// Process all child nodes
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractText(c, result)
+	}
+}
+
+func handleLink(n *html.Node, result *strings.Builder) {
+	// Extract href attribute
+	var href string
+	for _, attr := range n.Attr {
+		if attr.Key == "href" {
+			href = attr.Val
+			break
+		}
+	}
+
+	// Extract link text
+	var linkText strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractText(c, &linkText)
+	}
+
+	text := strings.TrimSpace(linkText.String())
+	if text == "" {
+		text = href // Use URL as text if no text content
+	}
+
+	if href != "" {
+		// Format: "link text (URL)" or just "link text" if URL is same as text
+		if href != text && !strings.Contains(text, href) {
+			result.WriteString(fmt.Sprintf("%s %s", text, href))
+		} else {
+			result.WriteString(text)
+		}
+	} else {
+		result.WriteString(text)
+	}
+	result.WriteString(" ")
+}
+
+// Alternative approach using tokenizer with better state tracking
+func htmlToTextTokenizer(inp string) string {
+	tokenizer := html.NewTokenizer(strings.NewReader(inp))
+	var result strings.Builder
+	var tagStack []string
+
+	for {
+		tokenType := tokenizer.Next()
+
+		switch tokenType {
+		case html.ErrorToken:
+			return strings.TrimSpace(result.String())
+
+		case html.StartTagToken:
+			token := tokenizer.Token()
+			tagStack = append(tagStack, token.Data)
+
+			// Handle link tags
+			if token.Data == "a" {
+				for _, attr := range token.Attr {
+					if attr.Key == "href" {
+						// Store href for later use
+						tagStack[len(tagStack)-1] = "a:" + attr.Val
+						break
+					}
+				}
+			}
+
+			// Add line breaks for block elements
+			if isBlockElement(token.Data) {
+				result.WriteString("\n")
+			}
+
+		case html.EndTagToken:
+			token := tokenizer.Token()
+			if len(tagStack) > 0 {
+				lastTag := tagStack[len(tagStack)-1]
+				if strings.HasPrefix(lastTag, "a:") {
+					// This was a link with href
+					href := strings.TrimPrefix(lastTag, "a:")
+					if href != "" {
+						result.WriteString(fmt.Sprintf(" (%s)", href))
+					}
+				}
+				tagStack = tagStack[:len(tagStack)-1]
+			}
+
+			// Add line breaks for block elements
+			if isBlockElement(token.Data) {
+				result.WriteString("\n")
+			}
+
+		case html.TextToken:
+			// Skip text inside script/style tags
+			if len(tagStack) > 0 {
+				currentTag := tagStack[len(tagStack)-1]
+				if strings.HasPrefix(currentTag, "script") ||
+					strings.HasPrefix(currentTag, "style") ||
+					strings.HasPrefix(currentTag, "head") {
+					continue
+				}
+			}
+
+			text := strings.TrimSpace(html.UnescapeString(string(tokenizer.Text())))
+			if text != "" {
+				result.WriteString(text)
+				result.WriteString(" ")
+			}
+		}
+	}
+}
+
+func isBlockElement(tag string) bool {
+	blockElements := map[string]bool{
+		"p": true, "div": true, "br": true,
+		"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+		"ul": true, "ol": true, "li": true,
+		"table": true, "tr": true, "td": true, "th": true,
+		"blockquote": true, "pre": true,
+	}
+	return blockElements[tag]
 }
 
 // BuildFileName builds a file name for a MIME part, using information extracted from
